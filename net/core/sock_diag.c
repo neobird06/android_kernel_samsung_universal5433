@@ -16,6 +16,7 @@ static DEFINE_MUTEX(sock_diag_table_mutex);
 int sock_diag_check_cookie(void *sk, __u32 *cookie)
 u64 sock_gen_cookie(struct sock *sk)
 static u64 sock_gen_cookie(struct sock *sk)
+int sock_diag_check_cookie(void *sk, const __u32 *cookie)
 {
 	while (1) {
 		u64 res = atomic64_read(&sk->sk_cookie);
