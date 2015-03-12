@@ -49,6 +49,10 @@ extern int inet_rtx_syn_ack(struct sock *parent, struct request_sock *req);
  */
 struct request_sock {
 	struct request_sock		*dl_next;
+	struct request_sock		*dl_next; /* Must be first member! */
+	unsigned char                   filler[offsetof(struct sock_common, skc_net)-sizeof(void*)];
+	struct net	 	       *skc_net;
+	atomic64_t		        skc_cookie;
 	u16				mss;
 	u8				num_retrans; /* number of retransmits */
 	u8				cookie_ts:1; /* syncookie: encode tcpopts in timestamp */

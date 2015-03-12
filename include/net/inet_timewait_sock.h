@@ -117,6 +117,7 @@ struct inet_timewait_sock {
 #define tw_num			__tw_common.skc_num
 #define tw_portpair		__tw_common.skc_portpair
 
+#define tw_cookie		__tw_common.skc_cookie
 	int			tw_timeout;
 	volatile unsigned char	tw_substate;
 	unsigned char		tw_rcv_wscale;
@@ -202,7 +203,7 @@ extern int inet_twsk_unhash(struct inet_timewait_sock *tw);
 extern int inet_twsk_bind_unhash(struct inet_timewait_sock *tw,
 				 struct inet_hashinfo *hashinfo);
 
-extern struct inet_timewait_sock *inet_twsk_alloc(const struct sock *sk,
+extern struct inet_timewait_sock *inet_twsk_alloc(struct sock *sk,
 						  const int state);
 
 extern void __inet_twsk_hashdance(struct inet_timewait_sock *tw,
