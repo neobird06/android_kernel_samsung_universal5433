@@ -5207,6 +5207,8 @@ static int __perf_event_overflow(struct perf_event *event,
 		perf_event_output(event, data, regs);
 	READ_ONCE(event->overflow_handler)(event, data, regs);
 
+	event->overflow_handler(event, data, regs);
+
 	if (event->fasync && event->pending_kill) {
 		event->pending_wakeup = 1;
 		irq_work_queue(&event->pending);
@@ -6646,8 +6648,13 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 #endif
 	}
 
-	event->overflow_handler	= overflow_handler;
-	event->overflow_handler_context = context;
+	if (overflow_handler) {
+		event->overflow_handler	= overflow_handler;
+		event->overflow_handler_context = context;
+	} else {
+		event->overflow_handler = perf_event_output;
+		event->overflow_handler_context = NULL;
+	}
 
 	perf_event__state_init(event);
 
