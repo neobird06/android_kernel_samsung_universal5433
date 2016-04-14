@@ -784,6 +784,44 @@ static void ffs_epfile_io_complete(struct usb_ep *_ep, struct usb_request *req)
 
 static ssize_t ffs_epfile_io(struct file *file,
 			     char __user *buf, size_t len, int read)
+static void ffs_user_copy_worker(struct work_struct *work)
+ {
+ 	struct ffs_io_data *io_data = container_of(work, struct ffs_io_data,
+ 						   work);
+ 	int ret = io_data->req->status ? io_data->req->status :
+ 					 io_data->req->actual;
+ 	if (io_data->read && ret > 0) {
+ 		int i;
+ 		size_t pos = 0;
+ 		use_mm(io_data->mm);
+ 		for (i = 0; i < io_data->nr_segs; i++) {
+ 			if (unlikely(copy_to_user(io_data->iovec[i].iov_base,
+ 						 &io_data->buf[pos],
+ 						 io_data->iovec[i].iov_len))) {
+ 				ret = -EFAULT;
+ 				break;
+ 			}
+ 			pos += io_data->iovec[i].iov_len;
+ 		}
+ 		unuse_mm(io_data->mm);
+ 	}
+ 	aio_complete(io_data->kiocb, ret, ret);
+ 	usb_ep_free_request(io_data->ep, io_data->req);
+ 	if (io_data->read)
+		kfree(io_data->iovec);
+ 	kfree(io_data->buf);
+	kfree(io_data);
+ }
+ static void ffs_epfile_async_io_complete(struct usb_ep *_ep,
+ 					 struct usb_request *req)
+ {
+ 	struct ffs_io_data *io_data = req->context;
+ 	ENTER();
+ 	INIT_WORK(&io_data->work, ffs_user_copy_worker);
+ 	schedule_work(&io_data->work);
+ }
+
+static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 {
 	struct ffs_epfile *epfile = file->private_data;
 	struct ffs_ep *ep;
