@@ -5708,6 +5708,11 @@ void perf_trace_run_bpf_submit(void *raw_data, int size, int rctx,
 	if (bpf_prog_array_valid(call)) {
 		*(struct pt_regs **)raw_data = regs;
 		if (!trace_call_bpf(call, raw_data) || hlist_empty(head)) {
+	struct bpf_prog *prog = call->prog;
+
+	if (prog) {
+		*(struct pt_regs **)raw_data = regs;
+		if (!trace_call_bpf(prog, raw_data) || hlist_empty(head)) {
 			perf_swevent_put_recursion_context(rctx);
 			return;
 		}

@@ -683,6 +683,9 @@ perf_trace_##call(void *__data, proto)					\
 	head = this_cpu_ptr(event_call->perf_events);			\
 	perf_trace_buf_submit(entry, __entry_size, rctx, __addr,	\
 		__count, &__regs, head, __task);			\
+	perf_trace_run_bpf_submit(entry, __entry_size, rctx,		\
+				  event_call, __count, &__regs,		\
+				  head, __task);			\
 }
 
 /*
