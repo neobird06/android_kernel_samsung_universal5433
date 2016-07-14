@@ -86,6 +86,7 @@ static inline unsigned int						\
 func_name(struct perf_output_handle *handle,				\
 	  const void *buf, unsigned int len)				\
 #define __DEFINE_OUTPUT_COPY_BODY(advance_buf, memcpy_func, ...)	\
+#define __DEFINE_OUTPUT_COPY_BODY(memcpy_func)				\
 {									\
 	unsigned long size, written;					\
 									\
@@ -117,6 +118,7 @@ static inline unsigned long						\
 func_name(struct perf_output_handle *handle,				\
 	  const void *buf, unsigned long len)				\
 __DEFINE_OUTPUT_COPY_BODY(true, memcpy_func, handle->addr, buf, size)
+__DEFINE_OUTPUT_COPY_BODY(memcpy_func)
 
 static inline unsigned long
 __output_custom(struct perf_output_handle *handle, perf_copy_f copy_func,
@@ -126,7 +128,7 @@ __output_custom(struct perf_output_handle *handle, perf_copy_f copy_func,
 	__DEFINE_OUTPUT_COPY_BODY(false, copy_func, handle->addr, buf,
 				  orig_len - len, size)
 }
-
+__DEFINE_OUTPUT_COPY_BODY(copy_func)
 static inline int memcpy_common(void *dst, const void *src, size_t n)
 {
 	memcpy(dst, src, n);
