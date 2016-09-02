@@ -5201,11 +5201,11 @@ static int __perf_event_overflow(struct perf_event *event,
 		event->pending_disable = 1;
 		irq_work_queue(&event->pending);
 	}
-
 	if (event->overflow_handler)
 		event->overflow_handler(event, data, regs);
 	else
 		perf_event_output(event, data, regs);
+	READ_ONCE(event->overflow_handler)(event, data, regs);
 
 	if (event->fasync && event->pending_kill) {
 		event->pending_wakeup = 1;
@@ -5919,6 +5919,10 @@ static int perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
 	    event->attr.type == PERF_TYPE_SOFTWARE)
 		return perf_event_set_bpf_handler(event, prog_fd);
 
+	if (event->attr.type == PERF_TYPE_HARDWARE ||
+	    event->attr.type == PERF_TYPE_SOFTWARE)
+		return perf_event_set_bpf_handler(event, prog_fd);
+
 	if (event->attr.type != PERF_TYPE_TRACEPOINT)
 		return -EINVAL;
 
@@ -5960,6 +5964,9 @@ static void perf_event_free_bpf_prog(struct perf_event *event)
 
 	if (event->attr.type != PERF_TYPE_TRACEPOINT) {
 		perf_event_free_bpf_handler(event);
+	perf_event_free_bpf_handler(event);
+
+	if (!event->tp_event)
 		return;
 	}
 
@@ -6624,6 +6631,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		overflow_handler = parent_event->overflow_handler;
 		context = parent_event->overflow_handler_context;
 #if defined(CONFIG_BPF_SYSCALL) && defined(CONFIG_EVENT_TRACING)
+#ifdef CONFIG_BPF_SYSCALL
 		if (overflow_handler == bpf_overflow_handler) {
 			struct bpf_prog *prog = bpf_prog_inc(parent_event->prog);
 
@@ -6668,6 +6676,9 @@ done:
 	else if (IS_ERR(pmu))
 		err = PTR_ERR(pmu);
 
+#ifdef CONFIG_BPF_SYSCALL
+err_ns:
+#endif
 	if (err) {
 		if (event->ns)
 			put_pid_ns(event->ns);
