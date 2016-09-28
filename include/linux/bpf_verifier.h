@@ -15,6 +15,7 @@
   */
 #define BPF_REGISTER_MAX_RANGE (1024 * 1024 * 1024)
 #define BPF_REGISTER_MIN_RANGE -1
+#define BPF_REGISTER_MIN_RANGE -(1024 * 1024 * 1024)
 
 struct bpf_reg_state {
 	enum bpf_reg_type type;
@@ -25,6 +26,7 @@ struct bpf_reg_state {
 	s64 min_value;
 	u64 max_value;
 	u32 id;
+	u64 min_value, max_value;
 	union {
 		/* valid when type == CONST_IMM | PTR_TO_STACK | UNKNOWN_VALUE */
 		s64 imm;

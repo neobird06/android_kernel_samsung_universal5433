@@ -219,6 +219,12 @@ static void print_verifier_state(struct bpf_verifier_state *state)
 		if (reg->min_value != BPF_REGISTER_MIN_RANGE)
 			verbose(",min_value=%lld",
 				(long long)reg->min_value);
+			verbose("(ks=%d,vs=%d)",
+				reg->map_ptr->key_size,
+				reg->map_ptr->value_size);
+		if (reg->min_value != BPF_REGISTER_MIN_RANGE)
+			verbose(",min_value=%llu",
+				(unsigned long long)reg->min_value);
 		if (reg->max_value != BPF_REGISTER_MAX_RANGE)
 			verbose(",max_value=%llu",
 				(unsigned long long)reg->max_value);
@@ -823,6 +829,7 @@ static int check_mem_access(struct bpf_verifier_env *env, int insn_idx, u32 regn
 			 * will have a set floor within our range.
 			 */
 			if (reg->min_value < 0) {
+			if ((s64)reg->min_value < 0) {
 				verbose("R%d min value is negative, either use unsigned index or do a if (index >=0) check.\n",
 					regno);
 				return -EACCES;
@@ -1614,6 +1621,7 @@ static void check_reg_overflow(struct bpf_reg_state *reg)
 		reg->max_value = BPF_REGISTER_MAX_RANGE;
 	if (reg->min_value < BPF_REGISTER_MIN_RANGE ||
 	    reg->min_value > BPF_REGISTER_MAX_RANGE)
+	if ((s64)reg->min_value < BPF_REGISTER_MIN_RANGE)
 		reg->min_value = BPF_REGISTER_MIN_RANGE;
 }
 
@@ -1623,6 +1631,7 @@ static void adjust_reg_min_max_vals(struct bpf_verifier_env *env,
 	struct bpf_reg_state *regs = env->cur_state.regs, *dst_reg;
 	s64 min_val = BPF_REGISTER_MIN_RANGE;
 	u64 max_val = BPF_REGISTER_MAX_RANGE;
+	u64 min_val = BPF_REGISTER_MIN_RANGE, max_val = BPF_REGISTER_MAX_RANGE;
 	bool min_set = false, max_set = false;
 	u8 opcode = BPF_OP(insn->code);
 
@@ -1668,6 +1677,10 @@ static void adjust_reg_min_max_vals(struct bpf_verifier_env *env,
 	       dst_reg->max_value != BPF_REGISTER_MAX_RANGE)) &&
 	     regs[insn->dst_reg].value_from_signed !=
 	     regs[insn->src_reg].value_from_signed)) {
+	 * as unknown.
+	 */
+	if (min_val == BPF_REGISTER_MIN_RANGE &&
+	    max_val == BPF_REGISTER_MAX_RANGE) {
 		reset_reg_range_values(regs, insn->dst_reg);
 		return;
 	}
@@ -1726,6 +1739,22 @@ static void adjust_reg_min_max_vals(struct bpf_verifier_env *env,
 			dst_reg->min_value = BPF_REGISTER_MIN_RANGE;
 		else
 			dst_reg->min_value = 0;
+	switch (opcode) {
+	case BPF_ADD:
+		dst_reg->min_value += min_val;
+		dst_reg->max_value += max_val;
+		break;
+	case BPF_SUB:
+		dst_reg->min_value -= min_val;
+		dst_reg->max_value -= max_val;
+		break;
+	case BPF_MUL:
+		dst_reg->min_value *= min_val;
+		dst_reg->max_value *= max_val;
+		break;
+	case BPF_AND:
+		/* & is special since it could end up with 0 bits set. */
+		dst_reg->min_value &= min_val;
 		dst_reg->max_value = max_val;
 		break;
 	case BPF_LSH:
@@ -1736,6 +1765,7 @@ static void adjust_reg_min_max_vals(struct bpf_verifier_env *env,
 		if (min_val > ilog2(BPF_REGISTER_MAX_RANGE))
 			dst_reg->min_value = BPF_REGISTER_MIN_RANGE;
 		else if (dst_reg->min_value != BPF_REGISTER_MIN_RANGE)
+		else
 			dst_reg->min_value <<= min_val;
 
 		if (max_val > ilog2(BPF_REGISTER_MAX_RANGE))
@@ -1759,6 +1789,19 @@ static void adjust_reg_min_max_vals(struct bpf_verifier_env *env,
 				(u64)(dst_reg->min_value) >> min_val;
 		if (dst_reg->max_value != BPF_REGISTER_MAX_RANGE)
 			dst_reg->max_value >>= max_val;
+		else
+			dst_reg->max_value <<= max_val;
+		break;
+	case BPF_RSH:
+		dst_reg->min_value >>= min_val;
+		dst_reg->max_value >>= max_val;
+		break;
+	case BPF_MOD:
+		/* % is special since it is an unsigned modulus, so the floor
+		 * will always be 0.
+		 */
+		dst_reg->min_value = 0;
+		dst_reg->max_value = max_val - 1;
 		break;
 	default:
 		reset_reg_range_values(regs, insn->dst_reg);
@@ -1866,6 +1909,9 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			regs[insn->dst_reg].imm = imm;
 			regs[insn->dst_reg].max_value = imm;
 			regs[insn->dst_reg].min_value = imm;
+			regs[insn->dst_reg].imm = insn->imm;
+			regs[insn->dst_reg].max_value = insn->imm;
+			regs[insn->dst_reg].min_value = insn->imm;
 		}
 
 	} else if (opcode > BPF_END) {
@@ -2324,6 +2370,104 @@ static void mark_map_regs(struct bpf_verifier_state *state, u32 regno,
 		mark_map_reg(state->spilled_regs, i / BPF_REG_SIZE,
 			     regs[regno].id, type);
 	}
+}
+
+/* Adjusts the register min/max values in the case that the dst_reg is the
+ * variable register that we are working on, and src_reg is a constant or we're
+ * simply doing a BPF_K check.
+ */
+static void reg_set_min_max(struct bpf_reg_state *true_reg,
+			    struct bpf_reg_state *false_reg, u64 val,
+			    u8 opcode)
+{
+	switch (opcode) {
+	case BPF_JEQ:
+		/* If this is false then we know nothing Jon Snow, but if it is
+		 * true then we know for sure.
+		 */
+		true_reg->max_value = true_reg->min_value = val;
+		break;
+	case BPF_JNE:
+		/* If this is true we know nothing Jon Snow, but if it is false
+		 * we know the value for sure;
+		 */
+		false_reg->max_value = false_reg->min_value = val;
+		break;
+	case BPF_JGT:
+		/* Unsigned comparison, the minimum value is 0. */
+		false_reg->min_value = 0;
+	case BPF_JSGT:
+		/* If this is false then we know the maximum val is val,
+		 * otherwise we know the min val is val+1.
+		 */
+		false_reg->max_value = val;
+		true_reg->min_value = val + 1;
+		break;
+	case BPF_JGE:
+		/* Unsigned comparison, the minimum value is 0. */
+		false_reg->min_value = 0;
+	case BPF_JSGE:
+		/* If this is false then we know the maximum value is val - 1,
+		 * otherwise we know the mimimum value is val.
+		 */
+		false_reg->max_value = val - 1;
+		true_reg->min_value = val;
+		break;
+	default:
+		break;
+	}
+
+	check_reg_overflow(false_reg);
+	check_reg_overflow(true_reg);
+}
+
+/* Same as above, but for the case that dst_reg is a CONST_IMM reg and src_reg
+ * is the variable reg.
+ */
+static void reg_set_min_max_inv(struct bpf_reg_state *true_reg,
+				struct bpf_reg_state *false_reg, u64 val,
+				u8 opcode)
+{
+	switch (opcode) {
+	case BPF_JEQ:
+		/* If this is false then we know nothing Jon Snow, but if it is
+		 * true then we know for sure.
+		 */
+		true_reg->max_value = true_reg->min_value = val;
+		break;
+	case BPF_JNE:
+		/* If this is true we know nothing Jon Snow, but if it is false
+		 * we know the value for sure;
+		 */
+		false_reg->max_value = false_reg->min_value = val;
+		break;
+	case BPF_JGT:
+		/* Unsigned comparison, the minimum value is 0. */
+		true_reg->min_value = 0;
+	case BPF_JSGT:
+		/*
+		 * If this is false, then the val is <= the register, if it is
+		 * true the register <= to the val.
+		 */
+		false_reg->min_value = val;
+		true_reg->max_value = val - 1;
+		break;
+	case BPF_JGE:
+		/* Unsigned comparison, the minimum value is 0. */
+		true_reg->min_value = 0;
+	case BPF_JSGE:
+		/* If this is false then constant < register, if it is true then
+		 * the register < constant.
+		 */
+		false_reg->min_value = val + 1;
+		true_reg->max_value = val;
+		break;
+	default:
+		break;
+	}
+
+	check_reg_overflow(false_reg);
+	check_reg_overflow(true_reg);
 }
 
 static int check_cond_jmp_op(struct bpf_verifier_env *env,
@@ -2869,6 +3013,10 @@ static bool states_equal(struct bpf_verifier_env *env,
 		 * mismatched range values and it's ok if our old type was
 		 * UNKNOWN and we didn't go to a NOT_INIT'ed or pointer reg.
 		 */
+		if (!env->varlen_map_value_access &&
+		    rold->type == rcur->type && rold->imm == rcur->imm)
+			continue;
+
 		if (rold->type == NOT_INIT ||
 		    (!varlen_map_access && rold->type == UNKNOWN_VALUE &&
 		     rcur->type != NOT_INIT &&
