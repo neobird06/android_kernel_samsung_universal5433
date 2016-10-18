@@ -466,6 +466,9 @@ static void mark_reg_unknown_value(struct bpf_reg_state *regs, u32 regno)
 {
 	BUG_ON(regno >= MAX_BPF_REG);
 	__mark_reg_unknown_value(regs, regno);
+	regs[regno].type = UNKNOWN_VALUE;
+	regs[regno].id = 0;
+	regs[regno].imm = 0;
 }
 
 static void reset_reg_range_values(struct bpf_reg_state *regs, u32 regno)
@@ -2230,6 +2233,38 @@ static void mark_map_regs(struct bpf_verifier_state *state, u32 regno,
 		if (state->stack_slot_type[i] != STACK_SPILL)
 			continue;
 		mark_map_reg(state->spilled_regs, i / BPF_REG_SIZE, id, type);
+	}
+}
+
+static void mark_map_reg(struct bpf_reg_state *regs, u32 regno, u32 id,
+			 enum bpf_reg_type type)
+{
+	struct bpf_reg_state *reg = &regs[regno];
+
+	if (reg->type == PTR_TO_MAP_VALUE_OR_NULL && reg->id == id) {
+		reg->type = type;
+		if (type == UNKNOWN_VALUE)
+			mark_reg_unknown_value(regs, regno);
+	}
+}
+
+/* The logic is similar to find_good_pkt_pointers(), both could eventually
+ * be folded together at some point.
+ */
+static void mark_map_regs(struct bpf_verifier_state *state, u32 regno,
+			  enum bpf_reg_type type)
+{
+	struct bpf_reg_state *regs = state->regs;
+	int i;
+
+	for (i = 0; i < MAX_BPF_REG; i++)
+		mark_map_reg(regs, i, regs[regno].id, type);
+
+	for (i = 0; i < MAX_BPF_STACK; i += BPF_REG_SIZE) {
+		if (state->stack_slot_type[i] != STACK_SPILL)
+			continue;
+		mark_map_reg(state->spilled_regs, i / BPF_REG_SIZE,
+			     regs[regno].id, type);
 	}
 }
 
