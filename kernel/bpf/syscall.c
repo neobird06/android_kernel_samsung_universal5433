@@ -894,6 +894,7 @@ static int bpf_obj_get(const union bpf_attr *attr)
 
 #define BPF_F_ATTACH_MASK \
 	(BPF_F_ALLOW_OVERRIDE | BPF_F_ALLOW_MULTI)
+#define BPF_PROG_ATTACH_LAST_FIELD attach_type
 
 static int bpf_prog_attach(const union bpf_attr *attr)
 {
@@ -931,6 +932,7 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 					attr->attach_flags & BPF_F_ALLOW_OVERRIDE);
 		if (ret)
 			bpf_prog_put(prog);
+		cgroup_bpf_update(cgrp, prog, attr->attach_type);
 		atomic_dec(&cgrp->count);
 		break;
 
@@ -939,6 +941,7 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 	}
 
 	return ret;
+	return 0;
 }
 
 #define BPF_PROG_DETACH_LAST_FIELD attach_type
@@ -949,6 +952,7 @@ static int bpf_prog_detach(const union bpf_attr *attr)
 	struct bpf_prog *prog;
 	struct cgroup *cgrp;
 	int ret;
+	struct cgroup *cgrp;
 
 	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
@@ -965,6 +969,7 @@ static int bpf_prog_detach(const union bpf_attr *attr)
 			return PTR_ERR(cgrp);
 
 		ret = cgroup_bpf_update(cgrp, NULL, attr->attach_type, false);
+		cgroup_bpf_update(cgrp, NULL, attr->attach_type);
 		atomic_dec(&cgrp->count);
 		break;
 
@@ -985,6 +990,7 @@ static int bpf_prog_detach(const union bpf_attr *attr)
 		bpf_prog_put(prog);
 	atomic_dec(&cgrp->count);
 	return ret;
+	return 0;
 }
 #endif /* CONFIG_CGROUP_BPF */
 
