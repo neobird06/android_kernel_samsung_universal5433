@@ -903,6 +903,30 @@ static void cgroup_diput(struct dentry *dentry, struct inode *inode)
 			  "cfe still linked for %s\n", cfe->type->name);
 		simple_xattrs_free(&cfe->xattrs);
 		kfree(cfe);
+		mutex_lock(&cgroup_mutex);
+		cgroup_bpf_put(cgrp);
+		/*
+		 * Release the subsystem state objects.
+		 */
+		for_each_subsys(cgrp->root, ss)
+			ss->destroy(cgrp);
+
+		cgrp->root->number_of_cgroups--;
+		mutex_unlock(&cgroup_mutex);
+
+		/*
+		 * Drop the active superblock reference that we took when we
+		 * created the cgroup
+		 */
+		deactivate_super(cgrp->root->sb);
+
+		/*
+		 * if we're getting rid of the cgroup, refcount should ensure
+		 * that there are no pidlists left.
+		 */
+		BUG_ON(!list_empty(&cgrp->pidlists));
+
+		kfree_rcu(cgrp, rcu_head);
 	}
 	iput(inode);
 }
@@ -4302,6 +4326,9 @@ static long cgroup_create(struct cgroup *parent, struct dentry *dentry,
 	if (err)
 		goto err_destroy;
 
+	if(parent)
+		cgroup_bpf_inherit(cgrp, parent);
+
 	mutex_unlock(&cgroup_mutex);
 	mutex_unlock(&cgrp->dentry->d_inode->i_mutex);
 
@@ -5507,6 +5534,16 @@ int cgroup_bpf_detach(struct cgroup *cgrp, struct bpf_prog *prog,
 	ret = __cgroup_bpf_detach(cgrp, prog, type, flags);
 	mutex_unlock(&cgroup_mutex);
 	return ret;
+#ifdef CONFIG_CGROUP_BPF
+void cgroup_bpf_update(struct cgroup *cgrp,
+                      struct bpf_prog *prog,
+                      enum bpf_attach_type type)
+{
+       struct cgroup *parent = cgroup_parent(cgrp);
+
+       mutex_lock(&cgroup_mutex);
+       __cgroup_bpf_update(cgrp, parent, prog, type);
+       mutex_unlock(&cgroup_mutex);
 }
 #endif /* CONFIG_CGROUP_BPF */
 

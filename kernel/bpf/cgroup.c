@@ -318,6 +318,91 @@ int __cgroup_bpf_update(struct cgroup *cgrp, struct cgroup *parent,
 	rcu_read_unlock();
 
 	static_key_slow_inc(&cgroup_bpf_enabled_key);
+	for (type = 0; type < ARRAY_SIZE(cgrp->bpf.prog); type++) {
+		struct bpf_prog *prog = cgrp->bpf.prog[type];
+
+		if (prog) {
+			bpf_prog_put(prog);
+			static_key_slow_dec(&cgroup_bpf_enabled_key);
+		}
+	}
+}
+
+/**
+ * cgroup_bpf_inherit() - inherit effective programs from parent
+ * @cgrp: the cgroup to modify
+ * @parent: the parent to inherit from
+ */
+void cgroup_bpf_inherit(struct cgroup *cgrp, struct cgroup *parent)
+{
+	unsigned int type;
+
+	for (type = 0; type < ARRAY_SIZE(cgrp->bpf.effective); type++) {
+		struct bpf_prog *e;
+
+		e = rcu_dereference_protected(parent->bpf.effective[type],
+					      lockdep_is_held(&cgroup_mutex));
+		rcu_assign_pointer(cgrp->bpf.effective[type], e);
+	}
+}
+
+/**
+ * __cgroup_bpf_update() - Update the pinned program of a cgroup, and
+ *                         propagate the change to descendants
+ * @cgrp: The cgroup which descendants to traverse
+ * @parent: The parent of @cgrp, or %NULL if @cgrp is the root
+ * @prog: A new program to pin
+ * @type: Type of pinning operation (ingress/egress)
+ *
+ * Each cgroup has a set of two pointers for bpf programs; one for eBPF
+ * programs it owns, and which is effective for execution.
+ *
+ * If @prog is %NULL, this function attaches a new program to the cgroup and
+ * releases the one that is currently attached, if any. @prog is then made
+ * the effective program of type @type in that cgroup.
+ *
+ * If @prog is %NULL, the currently attached program of type @type is released,
+ * and the effective program of the parent cgroup (if any) is inherited to
+ * @cgrp.
+ *
+ * Then, the descendants of @cgrp are walked and the effective program for
+ * each of them is set to the effective program of @cgrp unless the
+ * descendant has its own program attached, in which case the subbranch is
+ * skipped. This ensures that delegated subcgroups with own programs are left
+ * untouched.
+ *
+ * Must be called with cgroup_mutex held.
+ */
+void __cgroup_bpf_update(struct cgroup *cgrp,
+			 struct cgroup *parent,
+			 struct bpf_prog *prog,
+			 enum bpf_attach_type type)
+{
+	struct bpf_prog *old_prog, *effective;
+	struct cgroup *desc;
+
+	old_prog = xchg(cgrp->bpf.prog + type, prog);
+
+	effective = (!prog && parent) ?
+		rcu_dereference_protected(parent->bpf.effective[type],
+					  lockdep_is_held(&cgroup_mutex)) :
+		prog;
+
+	rcu_read_lock();
+	cgroup_for_each_descendant_pre(desc, cgrp) {
+
+		/* skip the subtree if the descendant has its own program */
+		if (desc->bpf.prog[type] && desc != cgrp)
+			desc = cgroup_rightmost_descendant(desc);
+		else
+			rcu_assign_pointer(desc->bpf.effective[type],
+					   effective);
+	}
+	rcu_read_unlock();
+
+	if (prog)
+		static_key_slow_inc(&cgroup_bpf_enabled_key);
+
 	if (old_prog) {
 		bpf_prog_put(old_prog);
 		static_key_slow_dec(&cgroup_bpf_enabled_key);
@@ -445,6 +530,7 @@ cleanup:
 /**
  * __cgroup_bpf_run_filter() - Run a program for packet filtering
  * @sk: The socket sending or receiving traffic
+ * @sk: The socken sending or receiving traffic
  * @skb: The skb that is being sent or received
  * @type: The type of program to be exectuted
  *
@@ -465,11 +551,15 @@ int __cgroup_bpf_run_filter(struct sock *sk,
 	struct sock *save_sk;
 	struct cgroup *cgrp;
 	int ret;
-
+	struct bpf_prog *prog;
+	struct cgroup *cgrp;
+	int ret = 0;
 	if (!sk || !sk_fullsock(sk))
 		return 0;
 
 	if (sk->sk_family != AF_INET && sk->sk_family != AF_INET6)
+	if (sk->sk_family != AF_INET &&
+	    sk->sk_family != AF_INET6)
 		return 0;
 
 	cgrp = sk->skcg;
@@ -496,6 +586,10 @@ int __cgroup_bpf_run_filter(struct sock *sk,
 		ret = bpf_prog_run_save_cb(prog, skb) == 1 ? 0 : -EPERM;
 		__skb_pull(skb, offset);
 		skb->sk = save_sk;
+
+		__skb_push(skb, offset);
+		ret = bpf_prog_run_save_cb(prog, skb) == 1 ? 0 : -EPERM;
+		__skb_pull(skb, offset);
 	}
 
 	rcu_read_unlock();

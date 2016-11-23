@@ -60,6 +60,28 @@ int __cgroup_bpf_update(struct cgroup *cgrp, struct cgroup *parent,
 /* Wrapper for __cgroup_bpf_update() protected by cgroup_mutex */
 int cgroup_bpf_update(struct cgroup *cgrp, struct bpf_prog *prog,
 		      enum bpf_attach_type type, bool overridable);
+struct cgroup_bpf {
+	/*
+	 * Store two sets of bpf_prog pointers, one for programs that are
+	 * pinned directly to this cgroup, and one for those that are effective
+	 * when this cgroup is accessed.
+	 */
+	struct bpf_prog *prog[MAX_BPF_ATTACH_TYPE];
+	struct bpf_prog *effective[MAX_BPF_ATTACH_TYPE];
+};
+
+void cgroup_bpf_put(struct cgroup *cgrp);
+void cgroup_bpf_inherit(struct cgroup *cgrp, struct cgroup *parent);
+
+void __cgroup_bpf_update(struct cgroup *cgrp,
+			 struct cgroup *parent,
+			 struct bpf_prog *prog,
+			 enum bpf_attach_type type);
+
+/* Wrapper for __cgroup_bpf_update() protected by cgroup_mutex */
+void cgroup_bpf_update(struct cgroup *cgrp,
+		       struct bpf_prog *prog,
+		       enum bpf_attach_type type);
 
 int __cgroup_bpf_run_filter(struct sock *sk,
 			    struct sk_buff *skb,
@@ -92,6 +114,8 @@ int __cgroup_bpf_run_filter(struct sock *sk,
 struct cgroup_bpf {};
 static inline void cgroup_bpf_put(struct cgroup *cgrp) {}
 static inline int cgroup_bpf_inherit(struct cgroup *cgrp) { return 0; }
+static inline void cgroup_bpf_inherit(struct cgroup *cgrp,
+				      struct cgroup *parent) {}
 
 #define BPF_CGROUP_RUN_PROG_INET_INGRESS(sk,skb) ({ 0; })
 #define BPF_CGROUP_RUN_PROG_INET_EGRESS(sk,skb) ({ 0; })
