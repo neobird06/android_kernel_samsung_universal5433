@@ -2848,6 +2848,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 		 */
 		if (!varlen_map_access &&
 		    memcmp(rold, rcur, offsetof(struct bpf_reg_state, id)+4) == 0)
+		    rold->type == rcur->type && rold->imm == rcur->imm)
 			continue;
 
 		/* If we didn't map access then again we don't care about the
@@ -2870,6 +2871,11 @@ static bool states_equal(struct bpf_verifier_env *env,
 		if (rold->type == PTR_TO_MAP_VALUE_OR_NULL &&
 		    rcur->type == PTR_TO_MAP_VALUE_OR_NULL &&
 		    rold->map_ptr == rcur->map_ptr)
+		 * UNKNOWN and we didn't go to a NOT_INIT'ed reg.
+		 */
+		if (rold->type == NOT_INIT ||
+		    (!varlen_map_access && rold->type == UNKNOWN_VALUE &&
+		     rcur->type != NOT_INIT))
 			continue;
 
 		if (rold->type == PTR_TO_PACKET && rcur->type == PTR_TO_PACKET &&
