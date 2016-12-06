@@ -103,6 +103,9 @@ static int bpf_mt_check_v1(const struct xt_mtchk_param *par)
 		return __bpf_mt_check_fd(info->fd, &info->filter);
 	else if (info->mode == XT_BPF_MODE_PATH_PINNED)
 		return __bpf_mt_check_path(info->path, &info->filter);
+	else if (info->mode == XT_BPF_MODE_FD_PINNED ||
+		 info->mode == XT_BPF_MODE_FD_ELF)
+		return __bpf_mt_check_fd(info->fd, &info->filter);
 	else
 		return -EINVAL;
 }
