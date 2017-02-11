@@ -893,6 +893,7 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 		return -EINVAL;
 
 	if (attr->attach_flags & ~BPF_F_ATTACH_MASK)
+	if (attr->attach_flags & ~BPF_F_ALLOW_OVERRIDE)
 		return -EINVAL;
 
 	switch (attr->attach_type) {
@@ -911,6 +912,8 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 
 		ret = cgroup_bpf_attach(cgrp, prog, attr->attach_type,
 					attr->attach_flags);
+		ret = cgroup_bpf_update(cgrp, prog, attr->attach_type,
+					attr->attach_flags & BPF_F_ALLOW_OVERRIDE);
 		if (ret)
 			bpf_prog_put(prog);
 		atomic_dec(&cgrp->count);
@@ -942,6 +945,12 @@ static int bpf_prog_detach(const union bpf_attr *attr)
 	case BPF_CGROUP_INET_INGRESS:
 	case BPF_CGROUP_INET_EGRESS:
 		ptype = BPF_PROG_TYPE_CGROUP_SKB;
+		cgrp = cgroup_get_from_fd(attr->target_fd);
+		if (IS_ERR(cgrp))
+			return PTR_ERR(cgrp);
+
+		ret = cgroup_bpf_update(cgrp, NULL, attr->attach_type, false);
+		atomic_dec(&cgrp->count);
 		break;
 
 	default:

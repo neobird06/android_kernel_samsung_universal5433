@@ -171,6 +171,11 @@ cleanup:
 	for (i = 0; i < NR; i++)
 		bpf_prog_array_free(arrays[i]);
 	return -ENOMEM;
+		e = rcu_dereference_protected(parent->bpf.effective[type],
+					      lockdep_is_held(&cgroup_mutex));
+		rcu_assign_pointer(cgrp->bpf.effective[type], e);
+		cgrp->bpf.disallow_override[type] = parent->bpf.disallow_override[type];
+	}
 }
 
 #define BPF_CGROUP_MAX_PROGS 64
@@ -201,6 +206,51 @@ int __cgroup_bpf_attach(struct cgroup *cgrp, struct bpf_prog *prog,
 
 	if (!hierarchy_allows_attach(cgrp, type, flags))
 		return -EPERM;
+int __cgroup_bpf_update(struct cgroup *cgrp, struct cgroup *parent,
+			struct bpf_prog *prog, enum bpf_attach_type type,
+			bool new_overridable)
+{
+	struct bpf_prog *old_prog, *effective = NULL;
+	struct cgroup *desc;
+	bool overridable = true;
+
+	if (parent) {
+		overridable = !parent->bpf.disallow_override[type];
+		effective = rcu_dereference_protected(parent->bpf.effective[type],
+						      lockdep_is_held(&cgroup_mutex));
+	}
+
+	if (prog && effective && !overridable)
+		/* if parent has non-overridable prog attached, disallow
+		 * attaching new programs to descendent cgroup
+		 */
+		return -EPERM;
+
+	if (prog && effective && overridable != new_overridable)
+		/* if parent has overridable prog attached, only
+		 * allow overridable programs in descendent cgroup
+		 */
+		return -EPERM;
+
+	old_prog = cgrp->bpf.prog[type];
+
+	if (prog) {
+		overridable = new_overridable;
+		effective = prog;
+		if (old_prog &&
+		    cgrp->bpf.disallow_override[type] == new_overridable)
+			/* disallow attaching non-overridable on top
+			 * of existing overridable in this cgroup
+			 * and vice versa
+			 */
+			return -EPERM;
+	}
+
+	if (!prog && !old_prog)
+		/* report error when trying to detach and nothing is attached */
+		return -ENOENT;
+
+	cgrp->bpf.prog[type] = prog;
 
 	if (!list_empty(progs) && cgrp->bpf.flags[type] != flags)
 		/* Disallow attaching non-overridable on top
@@ -256,6 +306,14 @@ int __cgroup_bpf_attach(struct cgroup *cgrp, struct bpf_prog *prog,
 
 		activate_effective_progs(desc, type, desc->bpf.inactive);
 		desc->bpf.inactive = NULL;
+		/* skip the subtree if the descendant has its own program */
+		if (desc->bpf.prog[type] && desc != cgrp) {
+			desc = cgroup_rightmost_descendant(desc);
+		} else {
+			rcu_assign_pointer(desc->bpf.effective[type],
+					   effective);
+			desc->bpf.disallow_override[type] = !overridable;
+		}
 	}
 	rcu_read_unlock();
 
@@ -265,7 +323,6 @@ int __cgroup_bpf_attach(struct cgroup *cgrp, struct bpf_prog *prog,
 		static_key_slow_dec(&cgroup_bpf_enabled_key);
 	}
 	return 0;
-
 cleanup:
 	/* oom while computing effective. Free all computed effective arrays
 	 * since they were not activated
