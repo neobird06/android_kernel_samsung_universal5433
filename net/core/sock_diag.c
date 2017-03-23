@@ -14,6 +14,7 @@ static int (*inet_rcv_compat)(struct sk_buff *skb, struct nlmsghdr *nlh);
 static DEFINE_MUTEX(sock_diag_table_mutex);
 
 int sock_diag_check_cookie(void *sk, __u32 *cookie)
+u64 sock_gen_cookie(struct sock *sk)
 {
 	if ((cookie[0] != INET_DIAG_NOCOOKIE ||
 	     cookie[1] != INET_DIAG_NOCOOKIE) &&
