@@ -74,5 +74,7 @@
 
 #define SO_SELECT_ERR_QUEUE	45
 
+#define SO_COOKIE              57
+
 #endif /* _ASM_SOCKET_H */
 
