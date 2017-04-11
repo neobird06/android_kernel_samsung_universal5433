@@ -99,12 +99,20 @@ int sk_filter(struct sock *sk, struct sk_buff *skb)
 	rcu_read_lock();
 	filter = rcu_dereference(sk->sk_filter);
 	if (filter) {
+<<<<<<< HEAD
 		unsigned int pkt_len = SK_RUN_FILTER(filter, skb);
 
 		err = pkt_len ? pskb_trim(skb, pkt_len) : -EPERM;
 		skb->sk = sk;
 		pkt_len = bpf_prog_run_save_cb(filter->prog, skb);
 		skb->sk = save_sk;
+=======
+		struct sock *save_sk = skb->sk;
+		unsigned int pkt_len;
+
+		skb->sk = sk;
+		pkt_len = bpf_prog_run_save_cb(filter->prog, skb);
+>>>>>>> f40dbc57371 (BACKPORT: UPSTREAM: bpf: pass sk to helper functions)
 		err = pkt_len ? pskb_trim(skb, max(cap, pkt_len)) : -EPERM;
 	}
 	rcu_read_unlock();

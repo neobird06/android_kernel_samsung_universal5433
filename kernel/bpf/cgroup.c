@@ -484,5 +484,22 @@ int __cgroup_bpf_run_filter(struct sock *sk,
 	__skb_pull(skb, offset);
 	skb->sk = save_sk;
 	return ret == 1 ? 0 : -EPERM;
+	rcu_read_lock();
+
+	prog = rcu_dereference(cgrp->bpf.effective[type]);
+	if (prog) {
+		unsigned int offset = skb->data - skb_network_header(skb);
+		struct sock *save_sk = skb->sk;
+
+		skb->sk = sk;
+		__skb_push(skb, offset);
+		ret = bpf_prog_run_save_cb(prog, skb) == 1 ? 0 : -EPERM;
+		__skb_pull(skb, offset);
+		skb->sk = save_sk;
+	}
+
+	rcu_read_unlock();
+
+	return ret;
 }
 EXPORT_SYMBOL(__cgroup_bpf_run_filter);
