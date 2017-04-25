@@ -577,6 +577,12 @@ static int map_get_next_key(union bpf_attr *attr)
 		if (!key)
 			goto err_put;
 
+	if (ukey) {
+		err = -ENOMEM;
+		key = kmalloc(map->key_size, GFP_USER);
+		if (!key)
+			goto err_put;
+
 		err = -EFAULT;
 		if (copy_from_user(key, ukey, map->key_size) != 0)
 			goto free_key;
