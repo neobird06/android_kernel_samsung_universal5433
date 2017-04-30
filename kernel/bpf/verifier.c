@@ -1936,6 +1936,10 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 					insn->dst_reg);
 				return -EACCES;
 			}
+			if (BPF_SRC(insn->code) == BPF_X)
+				dst_reg->imm += regs[insn->src_reg].imm;
+			else
+				dst_reg->imm += insn->imm;
 			return 0;
 		} else if (opcode == BPF_ADD &&
 			   BPF_CLASS(insn->code) == BPF_ALU64 &&
