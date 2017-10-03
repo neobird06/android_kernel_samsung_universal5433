@@ -1701,6 +1701,7 @@ static struct dentry *cgroup_mount(struct file_system_type *fs_type,
 #endif  /* CONFIG_TIMA_RKP_RO_CRED */
 		cgroup_populate_dir(root_cgrp, true, root->subsys_mask);
 		revert_creds(cred);
+		cgroup_bpf_inherit(root_cgrp);
 		mutex_unlock(&cgroup_root_mutex);
 		mutex_unlock(&cgroup_mutex);
 		mutex_unlock(&inode->i_mutex);
@@ -4265,6 +4266,13 @@ static long cgroup_create(struct cgroup *parent, struct dentry *dentry,
 	/* allocation complete, commit to creation */
 	list_add_tail(&cgrp->allcg_node, &root->allcg_list);
 	list_add_tail_rcu(&cgrp->sibling, &cgrp->parent->children);
+	err = cgroup_bpf_inherit(cgrp);
+	if(err)
+		goto err_destroy;
+
+	cgroup_lock_hierarchy(root);
+	list_add(&cgrp->sibling, &cgrp->parent->children);
+	cgroup_unlock_hierarchy(root);
 	root->number_of_cgroups++;
 
 	/* each css holds a ref to the cgroup's dentry */

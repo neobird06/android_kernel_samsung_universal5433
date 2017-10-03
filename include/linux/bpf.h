@@ -275,6 +275,14 @@ int bpf_prog_array_copy(struct bpf_prog_array __rcu *old_array,
 			_prog++;			\
 		}					\
 _out:							\
+#define BPF_PROG_RUN_ARRAY(array, ctx, func)		\
+	({						\
+		struct bpf_prog **_prog;		\
+		u32 _ret = 1;				\
+		rcu_read_lock();			\
+		_prog = rcu_dereference(array)->progs;	\
+		for (; *_prog; _prog++)			\
+			_ret &= func(*_prog, ctx);	\
 		rcu_read_unlock();			\
 		_ret;					\
 	 })

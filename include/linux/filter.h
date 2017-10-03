@@ -33,6 +33,24 @@ struct sk_filter
 
 
 static inline unsigned int sk_filter_len(const struct sk_filter *fp)
+#define BPF_PROG_RUN(filter, ctx)  (*(filter)->bpf_func)(ctx, (filter)->insnsi)
+
+#define BPF_SKB_CB_LEN 20
+
+struct bpf_skb_data_end {
+	struct qdisc_skb_cb qdisc_cb;
+	void *data_end;
+};
+
+struct xdp_buff {
+	void *data;
+	void *data_end;
+};
+
+/* compute the linear packet data range [data, data_end) which
+ * will be accessed by cls_bpf and act_bpf programs
+ */
+static inline void bpf_compute_data_end(struct sk_buff *skb)
 {
 	return fp->len * sizeof(struct sock_filter) + sizeof(*fp);
 }
