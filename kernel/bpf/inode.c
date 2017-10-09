@@ -319,6 +319,7 @@ int bpf_obj_get_user(const char __user *pathname, int flags)
 out:
 	return ret;
 }
+EXPORT_SYMBOL_GPL(bpf_obj_get_user);
 
 static struct bpf_prog *__get_prog_inode(struct inode *inode, enum bpf_prog_type type)
 {
