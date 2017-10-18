@@ -23,6 +23,8 @@
 
 #define BPF_OBJ_FLAG_MASK   (BPF_F_RDONLY | BPF_F_WRONLY)
 
+#define BPF_OBJ_FLAG_MASK   (BPF_F_RDONLY | BPF_F_WRONLY)
+
 DEFINE_PER_CPU(int, bpf_prog_active);
 
 int sysctl_unprivileged_bpf_disabled __read_mostly;
@@ -182,6 +184,7 @@ static ssize_t bpf_dummy_write(struct file *filp, const char __user *buf,
 }
 
 const struct file_operations bpf_map_fops = {
+static const struct file_operations bpf_map_fops = {
 	.release	= bpf_map_release,
 	.read		= bpf_dummy_read,
 	.write		= bpf_dummy_write,
@@ -559,6 +562,12 @@ static int map_get_next_key(union bpf_attr *attr)
 
 	if (!f.file->f_op->aio_read && !f.file->f_op->read) {
 		err = -EPERM;
+		goto err_put;
+	}
+
+	err = -ENOMEM;
+	key = kmalloc(map->key_size, GFP_USER);
+	if (!key)
 		goto err_put;
 	}
 

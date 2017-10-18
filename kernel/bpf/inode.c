@@ -259,6 +259,7 @@ out:
 }
 
 static void *bpf_obj_do_get(const char __user *pathname,
+static void *bpf_obj_do_get(const struct filename *pathname,
 			    enum bpf_type *type, int flags)
 {
 	struct inode *inode;
@@ -302,6 +303,12 @@ int bpf_obj_get_user(const char __user *pathname, int flags)
 		return f_flags;
 
 	raw = bpf_obj_do_get(pathname, &type, f_flags);
+
+	pname = getname(pathname);
+	if (IS_ERR(pname))
+		return PTR_ERR(pname);
+
+	raw = bpf_obj_do_get(pname, &type, f_flags);
 	if (IS_ERR(raw)) {
 		ret = PTR_ERR(raw);
 		goto out;
