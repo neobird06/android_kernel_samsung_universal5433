@@ -1175,6 +1175,9 @@ kprobe_perf_func(struct trace_probe *tp, struct pt_regs *regs)
 	int size, __size, dsize;
 	int rctx;
 
+	if (bpf_prog_array_valid(call) && !trace_call_bpf(call, regs))
+		return;
+
 	dsize = __get_data_size(tp, regs);
 	__size = sizeof(*entry) + tp->size + dsize;
 	size = ALIGN(__size + sizeof(u32), sizeof(u64));
@@ -1206,6 +1209,9 @@ kretprobe_perf_func(struct trace_probe *tp, struct kretprobe_instance *ri,
 	struct hlist_head *head;
 	int size, __size, dsize;
 	int rctx;
+
+	if (bpf_prog_array_valid(call) && !trace_call_bpf(call, regs))
+		return;
 
 	dsize = __get_data_size(tp, regs);
 	__size = sizeof(*entry) + tp->size + dsize;

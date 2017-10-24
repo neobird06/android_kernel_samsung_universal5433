@@ -297,6 +297,33 @@ struct ftrace_event_file {
 	unsigned long		flags;
 	atomic_t		sm_ref;	/* soft-mode reference counter */
 };
+	struct bpf_prog_array __rcu	*prog_array;
+#endif
+};
+
+#ifdef CONFIG_PERF_EVENTS
+static inline bool bpf_prog_array_valid(struct ftrace_event_call *call)
+{
+	/*
+	 * This inline function checks whether call->prog_array
+	 * is valid or not. The function is called in various places,
+	 * outside rcu_read_lock/unlock, as a heuristic to speed up execution.
+	 *
+	 * If this function returns true, and later call->prog_array
+	 * becomes false inside rcu_read_lock/unlock region,
+	 * we bail out then. If this function return false,
+	 * there is a risk that we might miss a few events if the checking
+	 * were delayed until inside rcu_read_lock/unlock region and
+	 * call->prog_array happened to become non-NULL then.
+	 *
+	 * Here, READ_ONCE() is used instead of rcu_access_pointer().
+	 * rcu_access_pointer() requires the actual definition of
+	 * "struct bpf_prog_array" while READ_ONCE() only needs
+	 * a declaration of the same type.
+	 */
+	return !!READ_ONCE(call->prog_array);
+}
+#endif
 
 #define __TRACE_EVENT_FLAGS(name, value)				\
 	static int __init trace_init_flags_##name(void)			\
@@ -316,6 +343,25 @@ extern int filter_current_check_discard(struct ring_buffer *buffer,
 					struct ftrace_event_call *call,
 					void *rec,
 					struct ring_buffer_event *event);
+
+
+#ifdef CONFIG_BPF_EVENTS
+unsigned int trace_call_bpf(struct ftrace_event_call *call, void *ctx);
+int perf_event_attach_bpf_prog(struct perf_event *event, struct bpf_prog *prog);
+void perf_event_detach_bpf_prog(struct perf_event *event);
+#else
+static inline unsigned int trace_call_bpf(struct ftrace_event_call *call, void *ctx)
+{
+	return 1;
+}
+static inline int
+perf_event_attach_bpf_prog(struct perf_event *event, struct bpf_prog *prog)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void perf_event_detach_bpf_prog(struct perf_event *event) { }
+#endif
 
 enum {
 	FILTER_OTHER = 0,
