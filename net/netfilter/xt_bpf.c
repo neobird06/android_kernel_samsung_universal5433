@@ -66,6 +66,15 @@ static int __bpf_mt_check_path(const char *path, struct bpf_prog **ret)
 		return 0;
 	return PTR_ERR_OR_ZERO(*ret);
 
+	if (strnlen(path, XT_BPF_PATH_MAX) == XT_BPF_PATH_MAX)
+		return -EINVAL;
+
+	set_fs(KERNEL_DS);
+	fd = bpf_obj_get_user(path);
+	set_fs(oldfs);
+	if (fd < 0)
+		return fd;
+
 }
 
 static int bpf_mt_check(const struct xt_mtchk_param *par)
