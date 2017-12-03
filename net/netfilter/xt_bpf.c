@@ -64,6 +64,8 @@ static int __bpf_mt_check_path(const char *path, struct bpf_prog **ret)
 		return PTR_ERR(*ret);
 	else
 		return 0;
+	return PTR_ERR_OR_ZERO(*ret);
+
 }
 
 static int bpf_mt_check(const struct xt_mtchk_param *par)
