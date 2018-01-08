@@ -58,6 +58,8 @@ static struct bpf_map *array_map_alloc(union bpf_attr *attr)
 	struct bpf_array *array;
 	int ret;
 	u64 array_size, mask64;
+	struct bpf_array *array;
+	u64 array_size;
 
 	/* check sanity of attributes */
 	if (attr->max_entries == 0 || attr->key_size != 4 ||
@@ -85,6 +87,9 @@ static struct bpf_map *array_map_alloc(union bpf_attr *attr)
 
 	index_mask = mask64;
 	if (unpriv) {
+	index_mask = roundup_pow_of_two(max_entries) - 1;
+
+	if (unpriv)
 		/* round up array size to nearest power of 2,
 		 * since cpu will speculate within index_mask limits
 		 */
