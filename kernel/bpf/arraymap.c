@@ -57,6 +57,7 @@ static struct bpf_map *array_map_alloc(union bpf_attr *attr)
 	u64 cost, array_size, mask64;
 	struct bpf_array *array;
 	int ret;
+	u64 array_size, mask64;
 
 	/* check sanity of attributes */
 	if (attr->max_entries == 0 || attr->key_size != 4 ||
