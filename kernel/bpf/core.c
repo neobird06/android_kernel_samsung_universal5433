@@ -1012,6 +1012,8 @@ static unsigned int __bpf_prog_ret0_warn(void *ctx,
 	 * is not working properly, so warn about it!
 	 */
 	WARN_ON_ONCE(1);
+static unsigned int __bpf_prog_ret0(void *ctx, const struct bpf_insn *insn)
+{
 	return 0;
 }
 #endif
@@ -1067,6 +1069,7 @@ struct bpf_prog *bpf_prog_select_runtime(struct bpf_prog *fp, int *err)
 	fp->bpf_func = (void *) __bpf_prog_run;
 #else
 	fp->bpf_func = (void *) __bpf_prog_ret0_warn;
+	fp->bpf_func = (void *) __bpf_prog_ret0;
 #endif
 
 	/* eBPF JITs can rewrite the program in case constant
