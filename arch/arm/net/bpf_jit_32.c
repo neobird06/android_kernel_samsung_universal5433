@@ -120,6 +120,56 @@ struct jit_ctx {
 #endif
 };
 
+static inline int call_neg_helper(struct sk_buff *skb, int offset, void *ret,
+		      unsigned int size)
+{
+	void *ptr = bpf_internal_load_pointer_neg_helper(skb, offset, size);
+
+	if (!ptr)
+		return -EFAULT;
+	memcpy(ret, ptr, size);
+	return 0;
+}
+
+static u64 jit_get_skb_b(struct sk_buff *skb, int offset)
+{
+	u8 ret;
+	int err;
+
+	if (offset < 0)
+		err = call_neg_helper(skb, offset, &ret, 1);
+	else
+		err = skb_copy_bits(skb, offset, &ret, 1);
+
+	return (u64)err << 32 | ret;
+}
+
+static u64 jit_get_skb_h(struct sk_buff *skb, int offset)
+{
+	u16 ret;
+	int err;
+
+	if (offset < 0)
+		err = call_neg_helper(skb, offset, &ret, 2);
+	else
+		err = skb_copy_bits(skb, offset, &ret, 2);
+
+	return (u64)err << 32 | ntohs(ret);
+}
+
+static u64 jit_get_skb_w(struct sk_buff *skb, int offset)
+{
+	u32 ret;
+	int err;
+
+	if (offset < 0)
+		err = call_neg_helper(skb, offset, &ret, 4);
+	else
+		err = skb_copy_bits(skb, offset, &ret, 4);
+
+	return (u64)err << 32 | ntohl(ret);
+}
+
 /*
  * Wrappers which handle both OABI and EABI and assures Thumb2 interworking
  * (where the assembly routines like __aeabi_uidiv could cause problems).
