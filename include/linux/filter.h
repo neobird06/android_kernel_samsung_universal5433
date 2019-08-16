@@ -75,6 +75,7 @@ extern void sk_decode_filter(struct sock_filter *filt, struct sock_filter *to);
 extern int bpf_jit_enable;
 extern int bpf_jit_harden;
 extern long bpf_jit_limit;
+extern int bpf_jit_limit;
 
 extern void bpf_jit_compile(struct sk_filter *fp);
 extern void bpf_jit_free(struct sk_filter *fp);
