@@ -897,6 +897,9 @@ static inline int cgroup_attach_task_all(struct task_struct *from,
 	return 0;
 }
 
+static inline void cgroup_sk_alloc(struct cgroup **skcg) {}
+static inline void cgroup_sk_clone(struct cgroup *skcg) {}
+static inline void cgroup_sk_free(struct cgroup *skcg) {}
 #endif /* !CONFIG_CGROUPS */
 
 #endif /* _LINUX_CGROUP_H */
