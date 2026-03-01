@@ -4016,7 +4016,8 @@ extern struct cpumask hmp_slow_cpu_mask;
 static void
 __setscheduler(struct rq *rq, struct task_struct *p, int policy, int prio)
 {
-	p->policy = policy;
+	/* Replace SCHED_FIFO with SCHED_RR to reduce latency */
+	p->policy = policy == SCHED_FIFO ? SCHED_RR : policy;
 	p->rt_priority = prio;
 	p->normal_prio = normal_prio(p);
 	/* we are holding p->pi_lock already */
