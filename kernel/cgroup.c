@@ -2600,6 +2600,7 @@ static ssize_t cgroup_listxattr(struct dentry *dentry, char *buf, size_t size)
 	if (!xattr_enabled(dentry))
 		return -EOPNOTSUPP;
 	return simple_xattr_list(__d_xattrs(dentry), buf, size);
+	return simple_rename(old_dir, old_dentry, new_dir, new_dentry, 0);
 }
 
 static const struct file_operations cgroup_file_operations = {
