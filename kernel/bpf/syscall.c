@@ -250,6 +250,10 @@ static int map_create(union bpf_attr *attr)
 	if (err)
 		goto free_map_sec;
 
+	err = bpf_map_charge_memlock(map);
+	if (err)
+		goto free_map_sec;
+
 	err = bpf_map_new_fd(map, f_flags);
 	if (err < 0)
 		/* failed to allocate fd */
