@@ -84,6 +84,8 @@
 #include <linux/export.h>
 #include <linux/msg.h>
 #include <linux/shm.h>
+#include <linux/pft.h>
+#include <linux/bpf.h>
 
 #include "avc.h"
 #include "objsec.h"
@@ -6538,6 +6540,15 @@ static void selinux_bpf_prog_free(struct bpf_prog_aux *aux)
 
 static struct security_operations selinux_ops = {
 	.name =				"selinux",
+#ifdef CONFIG_BPF_SYSCALL
+	.bpf =                          selinux_bpf,
+	.bpf_map =                      selinux_bpf_map,
+	.bpf_prog =                     selinux_bpf_prog,
+	.bpf_map_alloc_security =       selinux_bpf_map_alloc,
+	.bpf_map_free_security =        selinux_bpf_map_free,
+	.bpf_prog_alloc_security =      selinux_bpf_prog_alloc,
+	.bpf_prog_free_security =       selinux_bpf_prog_free,
+#endif
 
 	.binder_set_context_mgr =	selinux_binder_set_context_mgr,
 	.binder_transaction =		selinux_binder_transaction,
