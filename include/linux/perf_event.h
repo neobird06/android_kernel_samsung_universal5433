@@ -58,6 +58,19 @@ struct perf_callchain_entry {
 	__u64				ip[PERF_MAX_STACK_DEPTH];
 };
 
+typedef unsigned long (*perf_copy_f)(void *dst, const void *src,
+				     unsigned long off, unsigned long len);
+
+struct perf_raw_frag {
+	union {
+		struct perf_raw_frag	*next;
+		unsigned long		pad;
+	};
+	perf_copy_f			copy;
+	void				*data;
+	u32				size;
+} __packed;
+
 struct perf_raw_record {
 	u32				size;
 	void				*data;
