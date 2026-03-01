@@ -45,6 +45,9 @@ foreach my $filename (@files) {
 		$line =~ s/#ifndef\s+_UAPI/#ifndef /;
 		$line =~ s/#define\s+_UAPI/#define /;
 		$line =~ s!#endif\s+/[*]\s*_UAPI!#endif /* !;
+		$line =~ s/#ifndef _UAPI/#ifndef /;
+		$line =~ s/#define _UAPI/#define /;
+		$line =~ s!#endif /[*] _UAPI!#endif /* !;
 		printf {$out} "%s", $line;
 	}
 	close $out;
