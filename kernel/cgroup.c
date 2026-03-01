@@ -4325,6 +4325,13 @@ static int cgroup_destroy_locked(struct cgroup *cgrp)
 	lockdep_assert_held(&cgroup_mutex);
 
 	if (atomic_read(&cgrp->count) || !list_empty(&cgrp->children))
+return 0;
+
+	/* the vfs holds both inode->i_mutex already */
+again:
+	mutex_lock(&cgroup_mutex);
+	if (!cgroup_css_sets_empty(cgrp)) {
+		mutex_unlock(&cgroup_mutex);
 		return -EBUSY;
 
 	/*
