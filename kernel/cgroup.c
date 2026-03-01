@@ -5406,6 +5406,102 @@ struct cgroup_subsys_state *cgroup_css_from_dir(struct file *f, int id)
 	return css ? css : ERR_PTR(-ENOENT);
 }
 
+struct cgroup *cgroup_get_from_fd(int fd)
+{
+	struct file *f;
+	struct inode *inode;
+	struct cgroup *cgrp;
+
+	f = fget_raw(fd);
+	if (!f)
+		return ERR_PTR(-EBADF);
+
+	inode = f->f_dentry->d_inode;
+	/* check in cgroup filesystem dir */
+	if (inode->i_op != &cgroup_dir_inode_operations){
+		fput(f);
+		return ERR_PTR(-EBADF);
+	}
+
+	cgrp = __d_cgrp(f->f_dentry);
+	atomic_inc(&cgrp->count);
+	fput(f);
+	return cgrp;
+
+}
+EXPORT_SYMBOL_GPL(cgroup_get_from_fd);
+
+static struct cgroupfs_root *findBpfCg(void){
+
+	struct cgroupfs_root *root;
+
+	for_each_active_root(root)
+		if(root->subsys_bits == 0)
+			return root;
+
+	return NULL;
+
+}
+
+void cgroup_sk_alloc(struct cgroup **skcg)
+{
+	struct cgroup *cgrp;
+	static struct cgroupfs_root *bpfRoot = NULL;
+
+	/* Don't associate the sock with unrelated interrupted task's cgroup. */
+	if (in_interrupt())
+		return;
+
+	if(bpfRoot == NULL)
+		bpfRoot = findBpfCg();
+
+	if(bpfRoot){
+		mutex_lock(&cgroup_mutex);
+		cgrp = task_cgroup_from_root(current, bpfRoot);
+	        atomic_inc(&cgrp->count);
+		mutex_unlock(&cgroup_mutex);
+		*skcg = cgrp;
+	}
+	else
+		*skcg = NULL;
+}
+
+void cgroup_sk_clone(struct cgroup *skcg)
+{
+	/* Socket clone path */
+	if (skcg)
+		atomic_inc(&skcg->count);
+}
+
+void cgroup_sk_free(struct cgroup *skcg)
+{
+	if (skcg)
+		atomic_dec(&skcg->count);
+}
+
+#ifdef CONFIG_CGROUP_BPF
+int cgroup_bpf_attach(struct cgroup *cgrp, struct bpf_prog *prog,
+		      enum bpf_attach_type type, u32 flags)
+{
+	int ret;
+
+	mutex_lock(&cgroup_mutex);
+	ret = __cgroup_bpf_attach(cgrp, prog, type, flags);
+	mutex_unlock(&cgroup_mutex);
+	return ret;
+}
+int cgroup_bpf_detach(struct cgroup *cgrp, struct bpf_prog *prog,
+		      enum bpf_attach_type type, u32 flags)
+{
+	int ret;
+
+	mutex_lock(&cgroup_mutex);
+	ret = __cgroup_bpf_detach(cgrp, prog, type, flags);
+	mutex_unlock(&cgroup_mutex);
+	return ret;
+}
+#endif /* CONFIG_CGROUP_BPF */
+
 #ifdef CONFIG_CGROUP_DEBUG
 static struct cgroup_subsys_state *debug_css_alloc(struct cgroup *cont)
 {
