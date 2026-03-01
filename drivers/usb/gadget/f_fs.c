@@ -928,6 +928,28 @@ first_try:
 		req->complete = ffs_epfile_io_complete;
 		req->buf      = data;
 		req->length   = buffer_len;
+		struct usb_request *req;
+ 		if (io_data->aio) {
+ 			req = usb_ep_alloc_request(ep->ep, GFP_KERNEL);
+ 			if (unlikely(!req))
+ 				goto error;
+ 			req->buf      = data;
+ 			req->length   = io_data->len;
+
+			io_data->buf = data;
+ 			io_data->ep = ep->ep;
+ 			io_data->req = req;
+
+			req->context  = io_data;
+ 			req->complete = ffs_epfile_async_io_complete;
+ 			ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
+ 			if (unlikely(ret)) {
+				io_data->req = NULL;
+ 				usb_ep_free_request(ep->ep, req);
+ 				goto error;
+ 			}
+ 			ret = -EIOCBQUEUED;
+			spin_unlock_irq(&epfile->ffs->eps_lock);
 
 		if (read) {
 			INIT_COMPLETION(ffs->epout_completion);
