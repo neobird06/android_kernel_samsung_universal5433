@@ -135,6 +135,7 @@ static int __maybe_unused three = 3;
 static unsigned long one_ul = 1;
 static int one_hundred = 100;
 extern int max_swappiness;
+static int two_hundreds = 200;
 #ifdef CONFIG_PRINTK
 static int ten_thousand = 10000;
 #endif
@@ -1197,6 +1198,7 @@ static struct ctl_table vm_table[] = {
 #else
 		.extra2		= &one_hundred,
 #endif
+		.extra2		= &two_hundreds,
 	},
 #ifdef CONFIG_HUGETLB_PAGE
 	{
