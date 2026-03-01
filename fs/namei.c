@@ -4023,6 +4023,10 @@ SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
 	int error;
 retry:
 	from = user_path_parent(olddfd, oldname, &oldnd, lookup_flags);
+        if (flags & ~RENAME_NOREPLACE)
+                return -EINVAL;
+
+	from = user_path_parent(olddfd, oldname, &oldnd);
 	if (IS_ERR(from)) {
 		error = PTR_ERR(from);
 		goto exit;
@@ -4044,6 +4048,8 @@ retry:
 		goto exit2;
 
 	new_dir = newnd.path.dentry;
+	if (flags & RENAME_NOREPLACE)
+		error = -EEXIST;
 	if (newnd.last_type != LAST_NORM)
 		goto exit2;
 
@@ -4065,6 +4071,13 @@ retry:
 	error = -ENOENT;
 	if (!old_dentry->d_inode)
 		goto exit4;
+	new_dentry = lookup_hash(&newnd);
+	error = PTR_ERR(new_dentry);
+	if (IS_ERR(new_dentry))
+		goto exit4;
+	error = -EEXIST;
+	if ((flags & RENAME_NOREPLACE) && !d_is_negative(new_dentry))
+		goto exit5;
 	/* unless the source is a directory trailing slashes give -ENOTDIR */
 	if (!S_ISDIR(old_dentry->d_inode->i_mode)) {
 		error = -ENOTDIR;

@@ -67,7 +67,29 @@ typedef int (get_block_t)(struct inode *inode, sector_t iblock,
 typedef void (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 			ssize_t bytes, void *private, int ret,
 			bool is_async);
+#define RENAME_NOREPLACE	(1 << 0)	/* Don't overwrite target */
 
+struct fstrim_range {
+	__u64 start;
+	__u64 len;
+	__u64 minlen;
+};
+
+/* And dynamically-tunable limits and defaults: */
+struct files_stat_struct {
+	unsigned long nr_files;		/* read only */
+	unsigned long nr_free_files;	/* read only */
+	unsigned long max_files;		/* tunable */
+};
+
+struct inodes_stat_t {
+	int nr_inodes;
+	int nr_unused;
+	int dummy[5];		/* padding for sysctl ABI compatibility */
+};
+
+
+#define NR_FILE  8192	/* this can well be larger on a larger system */
 #define MAY_EXEC		0x00000001
 #define MAY_WRITE		0x00000002
 #define MAY_READ		0x00000004
