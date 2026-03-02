@@ -878,6 +878,7 @@ void cgroup_sk_clone(struct cgroup *skcg);
 void cgroup_sk_free(struct cgroup *skcg);
 
 struct cgroup *cgroup_get_from_fd(int fd);
+void cgroup_sk_free(struct cgroup *skcg);
 #else /* !CONFIG_CGROUPS */
 
 static inline int cgroup_init_early(void) { return 0; }

@@ -62,6 +62,7 @@
 #include <linux/kthread.h>
 
 #include <linux/atomic.h>
+#include <net/sock.h>
 
 /* css deactivation bias, makes css->refcnt negative to deny new trygets */
 #define CSS_DEACT_BIAS		INT_MIN
@@ -5546,6 +5547,11 @@ void cgroup_bpf_update(struct cgroup *cgrp,
        mutex_unlock(&cgroup_mutex);
 }
 #endif /* CONFIG_CGROUP_BPF */
+
+void cgroup_sk_free(struct cgroup *skcg)
+{
+	atomic_dec(&skcg->count);
+}
 
 #ifdef CONFIG_CGROUP_DEBUG
 static struct cgroup_subsys_state *debug_css_alloc(struct cgroup *cont)
